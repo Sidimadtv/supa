@@ -11,7 +11,7 @@ Deno.serve(async (req) => {
   // 1. CHANGE THIS TO YOUR BLOG NAME
   // Example: If your blog is "mysports123.blogspot.com", 
   // just put "mysports123"
-  const myBlogName = "yourblognamehere"; 
+  const myBlogName = "https://siditest.blogspot.com"; 
   // ---------------------------------------------------------
 
   // Check if your blog name is in the link asking for the video
