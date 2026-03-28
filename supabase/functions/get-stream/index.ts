@@ -1,27 +1,47 @@
-Deno.serve(async (req) => {
-  // 1. Get the headers from the browser
-  const origin = req.headers.get("origin") || "";
-  const referer = req.headers.get("referer") || "";
-  const userAgent = req.headers.get("user-agent") || "";
+// Define CORS headers so your website can talk to Supabase
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Allow-Headers': '*',
+}
 
-  // 2. THE SMART ALLOW LIST
-  // Just put the unique part of your blog names here (no https://)
-  const myBlogNames = ["https://siditest.blogspot.com", "yourblogname2"];
-
-  // Check if either the Origin or Referer contains your blog name
-  const isAllowed = myBlogNames.some(name => 
-    origin.includes(name) || referer.includes(name)
-  );
-
-  // 3. THE "SUPER-LOCK" Logic
-  // If it's NOT your blog, AND it's not a pre-flight request, BLOCK IT.
-  if (!isAllowed && req.method !== 'OPTIONS') {
-    console.log(`Blocked Access from: Origin: ${origin}, Referer: ${referer}`);
-    return new Response("Access Denied: This stream is private.", { 
-      status: 403, 
-      headers: { "Access-Control-Allow-Origin": "*" } 
-    });
+Deno.serve(async (req: Request) => {
+  // 1. Handle browser pre-flight (CORS)
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
   }
 
-  // --- REST OF YOUR CODE (API FETCH) GOES HERE ---
-  // Make sure to use "origin" in the Access-Control-Allow-Origin header below
+  try {
+    const url = new URL(req.url);
+    // Get ID from query parameter: ?id=9
+    const channelId = url.searchParams.get('id') || '9';
+    
+    const targetApi = `https://aloula.faulio.com/api/v1.1/channels/${channelId}/player`;
+    
+    // Use the exact headers that work in your Cloudflare script
+    const headers = {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+      "Referer": "https://www.aloula.sa/",
+      "Origin": "https://www.aloula.sa"
+    };
+
+    const res = await fetch(targetApi, { headers });
+    const data = await res.json();
+    const m3u8 = data?.streams?.hls;
+
+    if (!m3u8) {
+      return new Response("Not Found", { status: 404, headers: corsHeaders });
+    }
+
+    // Return the link as plain text
+    return new Response(m3u8, {
+      headers: { 
+        ...corsHeaders,
+        "Content-Type": "text/plain" 
+      }
+    });
+
+  } catch (err) {
+    return new Response(String(err), { status: 500, headers: corsHeaders });
+  }
+})
