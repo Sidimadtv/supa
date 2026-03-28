@@ -1,23 +1,39 @@
 const corsHeaders = {
-  // Replace with your actual Blogger URL
-  'Access-Control-Allow-Origin': 'https://siditest.blogspot.com',
-  'Access-Control-Allow-Methods': 'GET, OPTIONS',
-  'Access-Control-Allow-Headers': '*',
-}
+  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Headers": "*",
+};
 
 Deno.serve(async (req) => {
-  const origin = req.headers.get("Origin") || req.headers.get("Referer");
+  // 1. Get the "ID Card" of the person asking for the video
+  const origin = req.headers.get("origin") || "";
+  const referer = req.headers.get("referer") || "";
 
-  // 1. SECURITY CHECK: If the request is NOT from your Blogger, block it!
-  // This stops people from opening the link directly or putting it on other sites.
-  if (origin && !origin.includes("siditest.blogspot.com')) {
-    return new Response("Access Denied: This stream is locked to my Blogger.", { 
+  // 2. YOUR ALLOWED LIST
+  // Put your exact Blogger URLs here
+  const allowedBlogs = [
+    "https://siditest.blogspot.com",
+    "https://your-second-blog.blogspot.com"
+  ];
+
+  // Check if the request comes from your blogs
+  const isAllowed = allowedBlogs.some(blog => 
+    origin.startsWith(blog) || referer.startsWith(blog)
+  );
+
+  // 3. SECURITY GATE: If not on the list, block them immediately
+  if (!isAllowed && req.method !== 'OPTIONS') {
+    return new Response("Access Denied: This stream is private.", { 
       status: 403, 
-      headers: corsHeaders 
+      headers: { ...corsHeaders, "Access-Control-Allow-Origin": "*" } 
     });
   }
 
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+  // Handle CORS for the allowed browser
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { 
+      headers: { ...corsHeaders, "Access-Control-Allow-Origin": origin } 
+    });
+  }
 
   try {
     const url = new URL(req.url);
@@ -29,14 +45,14 @@ Deno.serve(async (req) => {
       "Origin": "https://www.aloula.sa"
     };
 
-    // Get fresh link from Aloula
+    // Get the fresh stream link
     const apiRes = await fetch(`https://aloula.faulio.com/api/v1.1/channels/${channelId}/player`, { headers: apiHeaders });
     const data = await apiRes.json();
     const m3u8Url = data?.streams?.hls;
 
-    if (!m3u8Url) return new Response("Not Found", { status: 404, headers: corsHeaders });
+    if (!m3u8Url) return new Response("Not Found", { status: 404 });
 
-    // Fetch and Rewrite the manifest
+    // Fetch and fix the manifest
     const streamRes = await fetch(m3u8Url, { headers: apiHeaders });
     let manifest = await streamRes.text();
     const baseUrl = m3u8Url.substring(0, m3u8Url.lastIndexOf('/') + 1);
@@ -44,11 +60,12 @@ Deno.serve(async (req) => {
 
     return new Response(manifest, {
       headers: {
-        ...corsHeaders,
-        "Content-Type": "application/vnd.apple.mpegurl"
+        "Access-Control-Allow-Origin": origin,
+        "Content-Type": "application/vnd.apple.mpegurl",
+        "Cache-Control": "no-store"
       }
     });
   } catch (e) {
-    return new Response("Error", { status: 500, headers: corsHeaders });
+    return new Response("Error", { status: 500 });
   }
 })
