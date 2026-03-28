@@ -5,50 +5,48 @@ const corsHeaders = {
 }
 
 Deno.serve(async (req) => {
-  // Handle CORS for the browser
+  // 1. Handle browser pre-flight (CORS)
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
     const url = new URL(req.url);
-    const channelId = url.searchParams.get('id') || '9';
-    
-    // 1. Get the actual .m3u8 link from Aloula
+    // Get ID from path or query. This works for both: /get-stream/9 OR /get-stream?id=9
+    const pathId = url.pathname.split('/').pop();
+    const queryId = url.searchParams.get('id');
+    const channelId = queryId || pathId || '9';
+
     const targetApi = `https://aloula.faulio.com/api/v1.1/channels/${channelId}/player`;
-    const commonHeaders = {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-      "Referer": "https://www.aloula.sa/",
-      "Origin": "https://www.aloula.sa"
-    };
 
-    const apiRes = await fetch(targetApi, { headers: commonHeaders });
-    const data = await apiRes.json();
-    const realM3u8Url = data?.streams?.hls;
+    // We use a Headers object to ensure Deno accepts the restricted names
+    const headers = new Headers();
+    headers.set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
+    headers.set("Referer", "https://www.aloula.sa/");
+    headers.set("Origin", "https://www.aloula.sa");
 
-    if (!realM3u8Url) return new Response("Channel Not Found", { status: 404, headers: corsHeaders });
+    const res = await fetch(targetApi, { 
+      method: 'GET',
+      headers: headers 
+    });
 
-    // 2. Fetch the content of the .m3u8 file
-    const streamRes = await fetch(realM3u8Url, { headers: commonHeaders });
-    let manifestText = await streamRes.text();
+    const data = await res.json();
+    const m3u8 = data?.streams?.hls;
 
-    /** * 3. CRITICAL FIX: Manifest Rewriting
-     * Standard M3U8 files use relative paths (like "chunk1.ts"). 
-     * We must change them to absolute paths so Shaka knows they belong to Aloula, not Supabase.
-     */
-    const baseUrl = realM3u8Url.substring(0, realM3u8Url.lastIndexOf('/') + 1);
-    
-    // This line finds any link that doesn't start with "http" or "#" and adds the Base URL to it
-    manifestText = manifestText.replace(/^(?!http|#)(.*)$/gm, `${baseUrl}$1`);
+    if (!m3u8) {
+      return new Response("Channel Not Found", { status: 404, headers: corsHeaders });
+    }
 
-    return new Response(manifestText, {
+    // Return the text link just like your Cloudflare worker did
+    return new Response(m3u8, {
       headers: { 
-        ...corsHeaders, 
-        "Content-Type": "application/vnd.apple.mpegurl" 
+        ...corsHeaders,
+        "Content-Type": "text/plain" 
       }
     });
 
   } catch (e) {
-    return new Response("Proxy Error", { status: 500, headers: corsHeaders });
+    console.error(e);
+    return new Response("Worker Error", { status: 500, headers: corsHeaders });
   }
 })
