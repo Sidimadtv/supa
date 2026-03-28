@@ -12,7 +12,7 @@ Deno.serve(async (req) => {
   // Put your exact Blogger URLs here
   const allowedBlogs = [
     "https://siditest.blogspot.com",
-    "https://your-second-blog.blogspot.com"
+    "https://sidimad-cima.blogspot.com"
   ];
 
   // Check if the request comes from your blogs
