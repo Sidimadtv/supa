@@ -1,13 +1,34 @@
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, OPTIONS',
-  'Access-Control-Allow-Headers': '*',
-}
+  "Access-Control-Allow-Methods": "GET, OPTIONS",
+  "Access-Control-Allow-Headers": "*",
+};
 
 Deno.serve(async (req) => {
-  // Handle CORS Preflight (Browser check)
+  const origin = req.headers.get("origin") || "";
+  const referer = req.headers.get("referer") || "";
+
+  // ---------------------------------------------------------
+  // 1. CHANGE THIS TO YOUR BLOG NAME
+  // Example: If your blog is "mysports123.blogspot.com", 
+  // just put "mysports123"
+  const myBlogName = "yourblognamehere"; 
+  // ---------------------------------------------------------
+
+  // Check if your blog name is in the link asking for the video
+  const isAllowed = origin.includes(myBlogName) || referer.includes(myBlogName);
+
+  // Security Gate: If someone tries to open the link directly, they get Access Denied.
+  if (!isAllowed && req.method !== 'OPTIONS') {
+    return new Response("Access Denied: This stream is private.", { 
+      status: 403, 
+      headers: { ...corsHeaders, "Access-Control-Allow-Origin": "*" } 
+    });
+  }
+
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    return new Response('ok', { 
+      headers: { ...corsHeaders, "Access-Control-Allow-Origin": origin || "*" } 
+    });
   }
 
   try {
@@ -20,29 +41,25 @@ Deno.serve(async (req) => {
       "Origin": "https://www.aloula.sa"
     };
 
-    // 1. Get the fresh stream link from Aloula
     const apiRes = await fetch(`https://aloula.faulio.com/api/v1.1/channels/${channelId}/player`, { headers: apiHeaders });
     const data = await apiRes.json();
     const m3u8Url = data?.streams?.hls;
 
-    if (!m3u8Url) return new Response("Not Found", { status: 404, headers: corsHeaders });
+    if (!m3u8Url) return new Response("Not Found", { status: 404 });
 
-    // 2. Fetch the video manifest (the .m3u8 content)
     const streamRes = await fetch(m3u8Url, { headers: apiHeaders });
     let manifest = await streamRes.text();
-
-    // 3. Fix the internal links so the player can find the video segments
     const baseUrl = m3u8Url.substring(0, m3u8Url.lastIndexOf('/') + 1);
     manifest = manifest.replace(/^(?!http|#)(.*)$/gm, `${baseUrl}$1`);
 
     return new Response(manifest, {
       headers: {
-        ...corsHeaders,
+        "Access-Control-Allow-Origin": origin || "*",
         "Content-Type": "application/vnd.apple.mpegurl",
         "Cache-Control": "no-store"
       }
     });
   } catch (e) {
-    return new Response("Error", { status: 500, headers: corsHeaders });
+    return new Response("Error", { status: 500 });
   }
 })
