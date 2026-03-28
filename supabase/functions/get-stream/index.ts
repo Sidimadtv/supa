@@ -1,71 +1,27 @@
-const corsHeaders = {
-  "Access-Control-Allow-Methods": "GET, OPTIONS",
-  "Access-Control-Allow-Headers": "*",
-};
-
 Deno.serve(async (req) => {
-  // 1. Get the "ID Card" of the person asking for the video
+  // 1. Get the headers from the browser
   const origin = req.headers.get("origin") || "";
   const referer = req.headers.get("referer") || "";
+  const userAgent = req.headers.get("user-agent") || "";
 
-  // 2. YOUR ALLOWED LIST
-  // Put your exact Blogger URLs here
-  const allowedBlogs = [
-    "https://siditest.blogspot.com",
-    "https://sidimad-cima.blogspot.com"
-  ];
+  // 2. THE SMART ALLOW LIST
+  // Just put the unique part of your blog names here (no https://)
+  const myBlogNames = ["https://siditest.blogspot.com", "yourblogname2"];
 
-  // Check if the request comes from your blogs
-  const isAllowed = allowedBlogs.some(blog => 
-    origin.startsWith(blog) || referer.startsWith(blog)
+  // Check if either the Origin or Referer contains your blog name
+  const isAllowed = myBlogNames.some(name => 
+    origin.includes(name) || referer.includes(name)
   );
 
-  // 3. SECURITY GATE: If not on the list, block them immediately
+  // 3. THE "SUPER-LOCK" Logic
+  // If it's NOT your blog, AND it's not a pre-flight request, BLOCK IT.
   if (!isAllowed && req.method !== 'OPTIONS') {
+    console.log(`Blocked Access from: Origin: ${origin}, Referer: ${referer}`);
     return new Response("Access Denied: This stream is private.", { 
       status: 403, 
-      headers: { ...corsHeaders, "Access-Control-Allow-Origin": "*" } 
+      headers: { "Access-Control-Allow-Origin": "*" } 
     });
   }
 
-  // Handle CORS for the allowed browser
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { 
-      headers: { ...corsHeaders, "Access-Control-Allow-Origin": origin } 
-    });
-  }
-
-  try {
-    const url = new URL(req.url);
-    const channelId = url.searchParams.get('id') || '9';
-    
-    const apiHeaders = {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-      "Referer": "https://www.aloula.sa/",
-      "Origin": "https://www.aloula.sa"
-    };
-
-    // Get the fresh stream link
-    const apiRes = await fetch(`https://aloula.faulio.com/api/v1.1/channels/${channelId}/player`, { headers: apiHeaders });
-    const data = await apiRes.json();
-    const m3u8Url = data?.streams?.hls;
-
-    if (!m3u8Url) return new Response("Not Found", { status: 404 });
-
-    // Fetch and fix the manifest
-    const streamRes = await fetch(m3u8Url, { headers: apiHeaders });
-    let manifest = await streamRes.text();
-    const baseUrl = m3u8Url.substring(0, m3u8Url.lastIndexOf('/') + 1);
-    manifest = manifest.replace(/^(?!http|#)(.*)$/gm, `${baseUrl}$1`);
-
-    return new Response(manifest, {
-      headers: {
-        "Access-Control-Allow-Origin": origin,
-        "Content-Type": "application/vnd.apple.mpegurl",
-        "Cache-Control": "no-store"
-      }
-    });
-  } catch (e) {
-    return new Response("Error", { status: 500 });
-  }
-})
+  // --- REST OF YOUR CODE (API FETCH) GOES HERE ---
+  // Make sure to use "origin" in the Access-Control-Allow-Origin header below
