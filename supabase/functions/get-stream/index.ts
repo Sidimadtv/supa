@@ -7,19 +7,19 @@ Deno.serve(async (req) => {
   const origin = req.headers.get("origin") || "";
   const referer = req.headers.get("referer") || "";
 
-  // ---------------------------------------------------------
-  // 1. CHANGE THIS TO YOUR BLOG NAME
-  // Example: If your blog is "mysports123.blogspot.com", 
-  // just put "mysports123"
-  const myBlogName = "siditest.blogspot.com"; 
-  // ---------------------------------------------------------
+  // 1. SMART KEYWORD CHECK
+  // Looking for 'siditest' anywhere in the address
+  const myBlogName = "siditest"; 
 
-  // Check if your blog name is in the link asking for the video
-  const isAllowed = origin.includes(myBlogName) || referer.includes(myBlogName);
+  // Check if it's your blog
+  const isAllowed = origin.toLowerCase().includes(myBlogName) || 
+                    referer.toLowerCase().includes(myBlogName);
 
-  // Security Gate: If someone tries to open the link directly, they get Access Denied.
+  // 2. SECURITY GATE
   if (!isAllowed && req.method !== 'OPTIONS') {
-    return new Response("Access Denied: This stream is private.", { 
+    // This logs what headers are actually arriving so you can see them in Supabase Logs
+    console.log(`Blocked! Origin: ${origin}, Referer: ${referer}`);
+    return new Response("Access Denied: Private Stream", { 
       status: 403, 
       headers: { ...corsHeaders, "Access-Control-Allow-Origin": "*" } 
     });
